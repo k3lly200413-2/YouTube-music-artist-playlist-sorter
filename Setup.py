@@ -32,7 +32,7 @@ def setup():
             print(f"Skipping auto/radio playlist: {title}")
             continue
 
-        new_title = f"{title}_backup"
+        new_title = f"{title}_ordinata"
         
         
         if any(existing['title'] == new_title for existing in playlists):
