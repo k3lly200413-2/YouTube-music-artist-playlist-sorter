@@ -1,36 +1,38 @@
-from ytmusicapi import YTMusic
 import time
+from ytmusicapi.exceptions import YTMusicServerError
 
-yt = YTMusic("browser.json")
-
-def sort_playlist(playlist_id):
+def sort_playlist(yt, playlist_id):
+    print("sorting playlists")
+    print("Stopping for 2 seconds")
     playlist = yt.get_playlist(playlist_id, limit=None)
     tracks = playlist["tracks"]
+    print(f"Sorting '{playlist['title']}' — {len(tracks)} tracks")
+    
 
     sort_key = lambda t: t["artists"][0]["name"].lower() if t["artists"] else ""
-    
+
     current_order = [t["setVideoId"] for t in tracks]
     target_order = [t["setVideoId"] for t in sorted(tracks, key=sort_key)]
-
-    moves_made = 0
-    for i in range(len(target_order) - 1):
+    count = 0
+    for i in range(len(target_order) - 2, -1, -1):
+        count+=1
         current_id = target_order[i]
         wanted_next_id = target_order[i + 1]
 
         idx = current_order.index(current_id)
-
-        # already correctly positioned — skip, no API call needed
         if idx + 1 < len(current_order) and current_order[idx + 1] == wanted_next_id:
             continue
 
-        yt.edit_playlist(playlist_id, moveItem=(current_id, wanted_next_id))
-        moves_made += 1
+        try:
+            yt.edit_playlist(playlist_id, moveItem=(current_id, wanted_next_id))
+        except YTMusicServerError as e:
+            print(f"Move failed, skipping: {e}")
+            continue
 
-        # update our local copy of the order to match the move we just made
         current_order.remove(current_id)
         insert_at = current_order.index(wanted_next_id)
         current_order.insert(insert_at, current_id)
 
-        time.sleep(0.5)
-
-    print(f"Sorted playlist: {moves_made} moves made out of {len(target_order) - 1} pairs checked")
+        print(f"We did this {count}")
+        time.sleep(1)
+    print(f"Done sorting '{playlist['title']}' — {count} moves made")
