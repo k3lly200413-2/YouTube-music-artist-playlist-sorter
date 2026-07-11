@@ -3,6 +3,7 @@ import time
 
 yt = YTMusic("browser.json")
 
+# youtube generated playlists
 SKIP_IDS = {"LM", "SS"}
 SKIP_PREFIXES = ("RD",)
 
@@ -21,12 +22,19 @@ def add_items_with_retry(playlist_id, video_ids, max_retries=3):
                 print(f"    Giving up on this chunk after {max_retries} attempts.")
                 return False
 
+
 def setup():
+    """Meant to be run only the first time a program is run.
+    This method will create new sorted playlists of all playlists
+    which still don't have a sorted version.
+    
+    """
     playlists = yt.get_library_playlists()
 
     for p in playlists:
         playlist_id = p['playlistId']
         title = p['title']
+
 
         if playlist_id in SKIP_IDS or playlist_id.startswith(SKIP_PREFIXES):
             print(f"Skipping auto/radio playlist: {title}")
@@ -49,7 +57,7 @@ def setup():
         print(f"Processing '{title}' -> '{new_title}'")
 
         playlist_data = yt.get_playlist(playlist_id, limit=None)
-        tracks = playlist_data.get("tracks", [])
+        tracks = playlist_data.get("tracks", default=[])
 
         valid_tracks = [t for t in tracks if t.get("artists") and t.get("videoId")]
         sorted_tracks = sorted(valid_tracks, key=lambda t: t["artists"][0]["name"].lower())
@@ -76,6 +84,7 @@ def setup():
         # give YouTube a moment to fully register the new playlist
         time.sleep(2)
 
+        # divide into chunks to avoid too many api calls in quick succession
         chunk_size = 50
         for i in range(0, len(video_ids), chunk_size):
             chunk = video_ids[i:i + chunk_size]

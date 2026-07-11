@@ -4,7 +4,7 @@ from ytmusicapi.exceptions import YTMusicServerError
 import time
 
 def add_song(yt, playlist, playlists):
-    print("We got to sync")
+    """Syncs a playlist to another when a song has been added to one of the two"""
     current_playlist = yt.get_playlist(playlist)
     if "ordinata" in current_playlist["title"]:
         other_playlist = current_playlist["title"].replace("_ordinata", "")

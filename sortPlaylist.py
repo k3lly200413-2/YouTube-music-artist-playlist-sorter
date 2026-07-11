@@ -2,12 +2,10 @@ import time
 from ytmusicapi.exceptions import YTMusicServerError
 
 def sort_playlist(yt, playlist_id):
-    print("sorting playlists")
-    print("Stopping for 2 seconds")
-    playlist = yt.get_playlist(playlist_id, limit=None)
-    tracks = playlist["tracks"]
-    print(f"Sorting '{playlist['title']}' — {len(tracks)} tracks")
+    """Sorts the playlists"""
     
+    playlist = yt.get_playlist(playlist_id, limit=None)
+    tracks = playlist["tracks"]    
 
     sort_key = lambda t: t["artists"][0]["name"].lower() if t["artists"] else ""
 
