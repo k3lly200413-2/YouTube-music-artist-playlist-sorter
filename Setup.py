@@ -57,7 +57,7 @@ def setup():
         print(f"Processing '{title}' -> '{new_title}'")
 
         playlist_data = yt.get_playlist(playlist_id, limit=None)
-        tracks = playlist_data.get("tracks", default=[])
+        tracks = playlist_data.get("tracks", [])
 
         valid_tracks = [t for t in tracks if t.get("artists") and t.get("videoId")]
         sorted_tracks = sorted(valid_tracks, key=lambda t: t["artists"][0]["name"].lower())
@@ -98,3 +98,6 @@ def setup():
         print(f"  Done: '{new_title}' processed.\n")
 
     print("All playlists processed.")
+
+if __name__ == "__main__":
+    setup()

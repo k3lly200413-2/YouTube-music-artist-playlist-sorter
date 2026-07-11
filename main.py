@@ -24,8 +24,9 @@ library_song_count = update_dict()
 previous_state = load_songs()
 
 while True:
+    setup()
+    update_song_count(playlists)
     # constantly check for a new playlist to be created
-    # TODO: what happens if we create a new playlist??
     playlists = yt.get_library_playlists(limit=None)
     # transforms all counts to ints
     for p in playlists:
