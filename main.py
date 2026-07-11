@@ -1,13 +1,9 @@
 from ytmusicapi import YTMusic
 import os
 import time
-import random
-import logging
 from state import *
 from sync import add_song, remove_songs
 from Setup import setup
-from paho.mqtt import client as mqtt_client
-import requests
 
 
 logging.basicConfig(level=logging.INFO)
@@ -18,115 +14,78 @@ port = 8883
 client_id = f"python-mqtt-{random.randint(0, 1000)}"
 username = ""
 password = ""
+yt = YTMusic("browser.json")
 
 SKIP_IDS = {"LM", "SS"}
 SKIP_PREFIXES = ("RD",)
 
+# all library info
+playlists = yt.get_library_playlists(limit=None)
+# currently for debugging reasons
+# for future will be useful to check if request headers are expireds
+print(len(playlists))
 
-def send_telegram_alert(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    try:
-        requests.post(url, data={"chat_id": CHAT_ID, "text": message}, timeout=10)
-    except Exception as e:
-        print(f"Failed to send Telegram alert: {e}")
+if not os.path.isfile("PrimoSetup.txt"):
+    setup()
+    update_song_count(playlists)
 
+library_song_count = update_dict()
+previous_state = load_songs()
 
-def on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
-    logger.info("Disconnected with reason code: %s", reason_code)
-
-
-def on_connect(client, userdata, flags, reason_code, properties):
-    if reason_code == 0:
-        logger.info("Connected to MQTT Broker!")
-    else:
-        logger.error(f"Failed to connect, return code {reason_code}")
-
-
-def connect_mqtt():
-    client = mqtt_client.Client(
-        client_id=client_id,
-        callback_api_version=mqtt_client.CallbackAPIVersion.VERSION2,
-    )
-
-    client.username_pw_set(username, password)
-    client.tls_set()  # required for port 8883
-
-    # LWT must be set BEFORE connect() — it's part of the initial CONNECT packet
-    client.will_set("ytmusic/Sasha/status", payload="offline", qos=1, retain=True)
-
-    client.on_connect = on_connect
-    client.on_disconnect = on_disconnect
-
-    client.connect(broker, port)
-    return client
-
-
-def sync_loop(client):
-    yt = YTMusic("browser.json")
-
+while True:
+    setup()
+    update_song_count(playlists)
+    # constantly check for a new playlist to be created
     playlists = yt.get_library_playlists(limit=None)
+    # transforms all counts to ints
+    for p in playlists:
+        p["count"] = int(str(p.get("count", 0)).replace(",", ""))
 
-    if not os.path.isfile("PrimoSetup.txt"):
-        setup()
-        update_song_count(playlists)
+    # we only want certain playlists
+    updated_playlists = [
+        p["playlistId"] for p in playlists if
+        (p["count"] != library_song_count.get(p["playlistId"], p["count"]))
+        and (p["playlistId"] not in SKIP_IDS)
+        and ("recap" not in p["title"].lower())
+        and (not p["playlistId"].startswith(SKIP_PREFIXES))
+    ]
 
+    for playlist_id in updated_playlists:
+        # fetch every track's videoId currently in this playlist, in its current order
+        current_ids = [t["videoId"] for t in yt.get_playlist(playlist_id, limit=None)["tracks"]]
+
+        # fall back to current_ids if we've never seen this playlist before (e.g. new playlist),
+        # so the diff below comes back empty instead of flagging everything as "added"
+        previous_ids = previous_state.get(playlist_id, current_ids)
+
+        # compare current vs. last-known state to find exactly what changed
+        added, removed = diff_playlist(previous_ids, current_ids)
+
+        if added:
+            # sync the new track(s) into the counterpart (_ordinata <-> non-_ordinata) playlist
+            target_id = add_song(yt, playlist_id, playlists)
+
+            if target_id:
+                # the target playlist's contents just changed too (it received the new track),
+                # so refresh its state now — otherwise next loop pass would see this addition
+                # as "new" from the target's own perspective and could re-sync it back, causing a duplicate
+                target_ids = [t["videoId"] for t in yt.get_playlist(target_id, limit=None)["tracks"]]
+                previous_state[target_id] = target_ids
+
+        if removed:
+            # mirror the removal into the counterpart playlist
+            target_id = remove_songs(yt, playlist_id, playlists, list(removed))
+
+            if target_id:
+                # same reasoning as above: the target's state changed too, keep it in sync
+                # to avoid re-detecting this removal (or a false "addition") next pass
+                target_ids = [t["videoId"] for t in yt.get_playlist(target_id, limit=None)["tracks"]]
+                previous_state[target_id] = target_ids
+
+        # record this playlist's current state as the new baseline for the next comparison
+        previous_state[playlist_id] = current_ids
+
+    save_songs(previous_state)
+    update_song_count(playlists)
     library_song_count = update_dict()
-    previous_state = load_songs()
-
-    while True:
-        playlists = yt.get_library_playlists(limit=None)
-
-        if len(playlists) == 0:
-            send_telegram_alert("⚠️ YT Music sync: playlist list is empty — browser.json likely expired.")
-            return
-
-        client.publish("ytmusic/Sasha/status", payload="online", qos=1, retain=True)
-
-        for p in playlists:
-            p["count"] = int(str(p.get("count", 0)).replace(",", ""))
-
-        updated_playlists = [
-            p["playlistId"] for p in playlists if
-            (p["count"] != library_song_count.get(p["playlistId"], p["count"]))
-            and (p["playlistId"] not in SKIP_IDS)
-            and ("recap" not in p["title"].lower())
-            and (not p["playlistId"].startswith(SKIP_PREFIXES))
-        ]
-
-        for playlist_id in updated_playlists:
-            current_ids = [t["videoId"] for t in yt.get_playlist(playlist_id, limit=None)["tracks"]]
-            previous_ids = previous_state.get(playlist_id, current_ids)
-            added, removed = diff_playlist(previous_ids, current_ids)
-
-            if added:
-                target_id = add_song(yt, playlist_id, playlists)
-                if target_id:
-                    target_ids = [t["videoId"] for t in yt.get_playlist(target_id, limit=None)["tracks"]]
-                    previous_state[target_id] = target_ids
-
-            if removed:
-                target_id = remove_songs(yt, playlist_id, playlists, list(removed))
-                if target_id:
-                    target_ids = [t["videoId"] for t in yt.get_playlist(target_id, limit=None)["tracks"]]
-                    previous_state[target_id] = target_ids
-
-            previous_state[playlist_id] = current_ids
-
-        save_songs(previous_state)
-        update_song_count(playlists)
-        library_song_count = update_dict()
-        time.sleep(5)
-
-
-if __name__ == "__main__":
-    client = connect_mqtt()
-    client.loop_start()  # background thread handles MQTT networking
-
-    try:
-        sync_loop(client)  # main thread runs the actual sync work
-    except Exception as e:
-        send_telegram_alert(f"🔴 YT Music sync crashed: {e}")
-        raise
-    finally:
-        client.loop_stop()
-        client.disconnect()
+    time.sleep(5)
