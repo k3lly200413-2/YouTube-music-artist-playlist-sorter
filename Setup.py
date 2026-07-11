@@ -31,9 +31,16 @@ def setup():
         if playlist_id in SKIP_IDS or playlist_id.startswith(SKIP_PREFIXES):
             print(f"Skipping auto/radio playlist: {title}")
             continue
-
-        new_title = f"{title}_ordinata"
         
+        if "_ordinata" in title:
+            print(f"Skipping already-sorted playlist: {title}")
+            continue
+        
+        if "recap" in title.lower():
+            print(f"Skipping, recap playlist, we don't want it: {title}")
+            continue
+            
+        new_title = f"{title}_ordinata"
         
         if any(existing['title'] == new_title for existing in playlists):
             print(f"'{new_title}' already exists, skipping.")

@@ -1,4 +1,6 @@
 import json
+import os
+
 
 
 def get_playlist_id_from_name(playlist_name, playlists):
@@ -9,6 +11,7 @@ def update_song_count(playlists):
     with open("PrimoSetup.txt", "w") as f:
         for p in playlists:
             f.write(f"{p['playlistId']} {p.get('count', 0)}\n")
+    print("done")
 
 def update_dict():
     with open("PrimoSetup.txt", "r") as f:
@@ -20,10 +23,26 @@ def update_dict():
         library_song_count[playlist_id] = int(count.replace(",", ""))
     return library_song_count
 
-def update_songs_json(playlist_data):
+def save_songs(playlist_data):
     with open("playlists.json", "w") as f:
         json.dump(playlist_data, f, indent=2)
 
-def read_songs_json():
-    with open("playlist.json") as f:
+def load_songs():
+    if not os.path.isfile("playlists.json"):
+        return {}
+    with open("playlists.json") as f:
         return json.load(f)
+    
+def build_current_state(yt, playlists):
+    state = {}
+    for p in playlists:
+        full_playlist = yt.get_playlist(p["playlistId"], limit=None)
+        state[p["playlistId"]] = [t["videoId"] for t in full_playlist["tracks"]]
+    return state
+
+def diff_playlist(previous_ids, current_ids):
+    previous_set = set(previous_ids)
+    current_set = set(current_ids)
+    added = [vid for vid in current_ids if vid not in previous_ids]
+    removed = previous_set - current_set
+    return added, removed
