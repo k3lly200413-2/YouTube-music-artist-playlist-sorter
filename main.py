@@ -8,19 +8,23 @@ from sync import add_song, remove_songs
 from Setup import setup
 from paho.mqtt import client as mqtt_client
 import requests
+from dotenv import load_dotenv
+import os
 
 
-BOT_TOKEN = ""
-CHAT_ID = ""
+load_dotenv()
+BOT_TOKEN = os.getenv("BOT_TOKEN", "Not_Set")
+CHAT_ID = os.getenv("CHAT_ID", "Not_Set")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-broker = "7d5d1b5d71624111bc4ab062aed42ba9.s1.eu.hivemq.cloud"
+print(os.getenv("BROKER", "None_Set"))
+broker = os.getenv("BROKER", "None_Set")
 port = 8883
 client_id = f"python-mqtt-{random.randint(0, 1000)}"
-username = ""
-password = ""
+username = os.getenv("BROKER_USER", "None_Set")
+password = os.getenv("BROKER_PASSWORD", "None_Set")
 
 SKIP_IDS = {"LM", "SS"}
 SKIP_PREFIXES = ("RD",)
@@ -78,6 +82,8 @@ def sync_loop(client):
 
     while True:
         playlists = yt.get_library_playlists(limit=None)
+        playlists = {}
+        print(len(playlists))
 
         if len(playlists) == 0:
             send_telegram_alert("⚠️ YT Music sync: playlist list is empty — browser.json likely expired.")
