@@ -60,3 +60,30 @@ def remove_songs(yt, up_to_date_playlist_id, playlists, removed_songs):
     print("sleeping 2 seconds")
     time.sleep(2)
     
+def compare_playlists(yt, not_sorted_playlist, plyalists):
+    if ("ordinata" in not_sorted_playlist.lower()):
+        return
+    if ("episodes for later" in not_sorted_playlist.lower()):
+        return
+    print(f"Looking at => {not_sorted_playlist}")
+    unsorted_id = get_playlist_id_from_name(not_sorted_playlist, plyalists)
+    sorted_id = get_playlist_id_from_name(f"{not_sorted_playlist}_ordinata", plyalists)
+
+    not_sorted_songs = yt.get_playlist(unsorted_id, limit=None)
+    sorted_playlist = yt.get_playlist(sorted_id, limit=None)
+
+    sorted_video_ids = {t["videoId"] for t in sorted_playlist["tracks"]}
+    unsorted_video_ids = {t["videoId"] for t in not_sorted_songs["tracks"]}
+
+    songs_only_in_unsorted = [t for t in not_sorted_songs["tracks"] if t["videoId"] not in sorted_video_ids]
+    songs_only_in_sorted = [t for t in sorted_playlist["tracks"] if t["videoId"] not in unsorted_video_ids]
+    
+    print(f"Songs in only sorted => {len(songs_only_in_sorted)}")
+    print(f"Songs in only unsorted => {len(songs_only_in_unsorted)}")
+
+    if len(songs_only_in_unsorted) > 0:
+        yt.add_playlist_items(sorted_id, [t["videoId"] for t in songs_only_in_unsorted], duplicates=True)
+        sort_playlist(yt, sorted_id)
+    if len(songs_only_in_sorted) > 0:
+        yt.add_playlist_items(unsorted_id, [t["videoId"] for t in songs_only_in_sorted])
+

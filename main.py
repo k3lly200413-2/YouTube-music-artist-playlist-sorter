@@ -4,7 +4,7 @@ import time
 import random
 import logging
 from state import *
-from sync import add_song, remove_songs
+from sync import add_song, remove_songs, compare_playlists
 from Setup import *
 from paho.mqtt import client as mqtt_client
 import requests
@@ -80,10 +80,10 @@ def sync_loop(client):
 
     library_song_count = update_dict()
     previous_state = load_songs()
+    first_check = True
 
     while True:
         playlists = yt.get_library_playlists(limit=None)
-        
         print(len(playlists))
 
         if len(playlists) == 0:
@@ -93,8 +93,17 @@ def sync_loop(client):
         client.publish("ytmusic/Sasha/status", payload="online", qos=1, retain=True)
 
         for p in playlists:
+            playlist_id = p["playlistId"]
             p["count"] = int(str(p.get("count", 0)).replace(",", ""))
+            if (first_check):   
+                if playlist_id not in SKIP_IDS\
+                    and not playlist_id.startswith(SKIP_PREFIXES)\
+                    and "recap" not in p["title"].lower()\
+                    and "episodes for Later" not in p["title"].lower():
+                        compare_playlists(yt, p["title"], playlists)
+            
             if (check_new_playlist(playlists, p["playlistId"], p["title"])):
+                
                 new_playlist = create_new_playlist(p["title"])
                 playlist_data = yt.get_playlist(p["playlistId"], limit=None)
                 tracks = playlist_data.get("tracks", [])
@@ -114,9 +123,8 @@ def sync_loop(client):
                         video_ids.append(vid)
                         
                 populate_playlist(video_ids, new_playlist, f"{p["title"]}_ordinata")
-                
-                
-                
+        
+        first_check = False
         updated_playlists = [
             p["playlistId"] for p in playlists if
             (p["count"] != library_song_count.get(p["playlistId"], p["count"]))

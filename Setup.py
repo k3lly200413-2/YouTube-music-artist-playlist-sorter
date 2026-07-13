@@ -1,5 +1,6 @@
 from ytmusicapi import YTMusic
 import time
+from sync import compare_playlists
 
 yt = YTMusic("browser.json")
 
@@ -24,12 +25,12 @@ def add_items_with_retry(playlist_id, video_ids, max_retries=3):
 
 def check_new_playlist(playlists, playlist_id, title):
     new_title = f"{title}_ordinata"
-    if playlist_id in SKIP_IDS or playlist_id.startswith(SKIP_PREFIXES):
-        # print(f"Skipping auto/radio playlist: {title}")
-        return False
-        
     if "_ordinata" in title:
         # print(f"Skipping already-sorted playlist: {title}")
+        return False
+    
+    if playlist_id in SKIP_IDS or playlist_id.startswith(SKIP_PREFIXES):
+        # print(f"Skipping auto/radio playlist: {title}")
         return False
         
     if "recap" in title.lower():
@@ -38,6 +39,9 @@ def check_new_playlist(playlists, playlist_id, title):
                     
     if any(existing['title'] == new_title for existing in playlists):
         # print(f"'{new_title}' already exists, skipping.")
+        return False
+    
+    if "episodes for Later" in title.lower():
         return False
     
     return True
@@ -71,7 +75,6 @@ def setup():
     for p in playlists:
         playlist_id = p['playlistId']
         title = p['title']
-        
         if(not check_new_playlist(playlists, playlist_id, title)):
             continue
 
@@ -105,6 +108,8 @@ def setup():
         populate_playlist(video_ids, new_playlist_id, title)
 
         print(f"  Done: '{title}_ordinata' processed.\n")
+        
+        
 
     print("All playlists processed.")
 
