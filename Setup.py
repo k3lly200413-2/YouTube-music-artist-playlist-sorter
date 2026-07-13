@@ -22,6 +22,43 @@ def add_items_with_retry(playlist_id, video_ids, max_retries=3):
                 print(f"    Giving up on this chunk after {max_retries} attempts.")
                 return False
 
+def check_new_playlist(playlists, playlist_id, title):
+    new_title = f"{title}_ordinata"
+    if playlist_id in SKIP_IDS or playlist_id.startswith(SKIP_PREFIXES):
+        # print(f"Skipping auto/radio playlist: {title}")
+        return False
+        
+    if "_ordinata" in title:
+        # print(f"Skipping already-sorted playlist: {title}")
+        return False
+        
+    if "recap" in title.lower():
+        # print(f"Skipping, recap playlist, we don't want it: {title}")
+        return False
+                    
+    if any(existing['title'] == new_title for existing in playlists):
+        # print(f"'{new_title}' already exists, skipping.")
+        return False
+    
+    return True
+
+def create_new_playlist(title):
+    return yt.create_playlist(
+            f"{title}_ordinata",
+            description=f"Ordinata per artista da '{title}'",
+            privacy_status="PRIVATE"
+        )
+
+def populate_playlist(video_ids, new_playlist_id, title):
+    chunk_size = 50
+    for i in range(0, len(video_ids), chunk_size):
+        chunk = video_ids[i:i + chunk_size]
+        success = add_items_with_retry(new_playlist_id, chunk)
+        if success:
+            print(f"  Added {len(chunk)} tracks ({i + len(chunk)}/{len(video_ids)}) for {title}")
+        else:
+            print(f"  FAILED chunk {i}-{i+len(chunk)} for '{title}', continuing anyway.")
+        time.sleep(1.5)
 
 def setup():
     """Meant to be run only the first time a program is run.
@@ -34,27 +71,11 @@ def setup():
     for p in playlists:
         playlist_id = p['playlistId']
         title = p['title']
-
-
-        if playlist_id in SKIP_IDS or playlist_id.startswith(SKIP_PREFIXES):
-            print(f"Skipping auto/radio playlist: {title}")
-            continue
         
-        if "_ordinata" in title:
-            print(f"Skipping already-sorted playlist: {title}")
-            continue
-        
-        if "recap" in title.lower():
-            print(f"Skipping, recap playlist, we don't want it: {title}")
-            continue
-            
-        new_title = f"{title}_ordinata"
-        
-        if any(existing['title'] == new_title for existing in playlists):
-            print(f"'{new_title}' already exists, skipping.")
+        if(not check_new_playlist(playlists, playlist_id, title)):
             continue
 
-        print(f"Processing '{title}' -> '{new_title}'")
+        print(f"Processing '{title}' -> '{title}_ordinata'")
 
         playlist_data = yt.get_playlist(playlist_id, limit=None)
         tracks = playlist_data.get("tracks", [])
@@ -75,27 +96,15 @@ def setup():
                 seen.add(vid)
                 video_ids.append(vid)
 
-        new_playlist_id = yt.create_playlist(
-            new_title,
-            description=f"Ordinata per artista da '{title}'",
-            privacy_status="PRIVATE"
-        )
+        new_playlist_id = create_new_playlist(title)
 
         # give YouTube a moment to fully register the new playlist
         time.sleep(2)
 
         # divide into chunks to avoid too many api calls in quick succession
-        chunk_size = 50
-        for i in range(0, len(video_ids), chunk_size):
-            chunk = video_ids[i:i + chunk_size]
-            success = add_items_with_retry(new_playlist_id, chunk)
-            if success:
-                print(f"  Added {len(chunk)} tracks ({i + len(chunk)}/{len(video_ids)})")
-            else:
-                print(f"  FAILED chunk {i}-{i+len(chunk)} for '{title}', continuing anyway.")
-            time.sleep(1.5)
+        populate_playlist(video_ids, new_playlist_id, title)
 
-        print(f"  Done: '{new_title}' processed.\n")
+        print(f"  Done: '{title}_ordinata' processed.\n")
 
     print("All playlists processed.")
 

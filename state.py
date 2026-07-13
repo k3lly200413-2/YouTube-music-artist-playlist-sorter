@@ -2,7 +2,6 @@ import json
 import os
 
 
-
 def get_playlist_id_from_name(playlist_name, playlists):
     return next((p["playlistId"] for p in playlists if p["title"] == playlist_name), None)
 
@@ -61,3 +60,7 @@ def diff_playlist(previous_ids, current_ids):
     added = [vid for vid in current_ids if vid not in previous_ids]
     removed = previous_set - current_set
     return added, removed
+
+
+def sort_songs(valid_tracks):
+    return sorted(valid_tracks, key=lambda t: t["artists"][0]["name"].lower())

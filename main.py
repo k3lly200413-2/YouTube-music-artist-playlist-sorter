@@ -5,7 +5,7 @@ import random
 import logging
 from state import *
 from sync import add_song, remove_songs
-from Setup import setup
+from Setup import *
 from paho.mqtt import client as mqtt_client
 import requests
 from dotenv import load_dotenv
@@ -69,6 +69,7 @@ def connect_mqtt():
 
 
 def sync_loop(client):
+    count = 0
     yt = YTMusic("browser.json")
 
     playlists = yt.get_library_playlists(limit=None)
@@ -82,7 +83,7 @@ def sync_loop(client):
 
     while True:
         playlists = yt.get_library_playlists(limit=None)
-        playlists = {}
+        
         print(len(playlists))
 
         if len(playlists) == 0:
@@ -93,7 +94,29 @@ def sync_loop(client):
 
         for p in playlists:
             p["count"] = int(str(p.get("count", 0)).replace(",", ""))
+            if (check_new_playlist(playlists, p["playlistId"], p["title"])):
+                new_playlist = create_new_playlist(p["title"])
+                playlist_data = yt.get_playlist(p["playlistId"], limit=None)
+                tracks = playlist_data.get("tracks", [])
+                valid_tracks = [t for t in tracks if t.get("artists") and t.get("videoId")]
+                sorted_tracks = sort_songs(valid_tracks)
+                if not sorted_tracks:
+                    print(f"  No valid tracks in '{p["title"]}', skipping playlist creation.")
+                    continue
 
+                # Dedupe while preserving sorted order
+                seen = set()
+                video_ids = []
+                for t in sorted_tracks:
+                    vid = t["videoId"]
+                    if vid not in seen:
+                        seen.add(vid)
+                        video_ids.append(vid)
+                        
+                populate_playlist(video_ids, new_playlist, f"{p["title"]}_ordinata")
+                
+                
+                
         updated_playlists = [
             p["playlistId"] for p in playlists if
             (p["count"] != library_song_count.get(p["playlistId"], p["count"]))
@@ -124,6 +147,8 @@ def sync_loop(client):
         save_songs(previous_state)
         update_song_count(playlists)
         library_song_count = update_dict()
+        count+=1
+        print(f"Sleeping for 5 secs\n this is the {count}nth")
         time.sleep(5)
 
 
